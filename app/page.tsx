@@ -13,6 +13,7 @@ type Status = "idle" | "running" | "done" | "error";
 export default function Home() {
   const [topic, setTopic] = useState("");
   const [rounds, setRounds] = useState(3);
+  const [mock, setMock] = useState(true);
   const [items, setItems] = useState<DisplayItem[]>([]);
   const [status, setStatus] = useState<Status>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -33,7 +34,7 @@ export default function Home() {
       const res = await fetch("/api/debate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: trimmedTopic, rounds }),
+        body: JSON.stringify({ topic: trimmedTopic, rounds, mock }),
         signal: controller.signal,
       });
 
@@ -157,6 +158,16 @@ export default function Home() {
           {status === "running" ? "討論中..." : "討論開始"}
         </button>
       </form>
+
+      <label className="flex items-center gap-2 text-sm text-black/70 dark:text-white/70">
+        <input
+          type="checkbox"
+          checked={mock}
+          onChange={(e) => setMock(e.target.checked)}
+          disabled={status === "running"}
+        />
+        モックモードで試す(API課金なし・定型文のダミー討論)
+      </label>
 
       {errorMessage && (
         <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
