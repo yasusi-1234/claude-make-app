@@ -37,6 +37,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local sqlite database (regenerate with `npm run seed`)
+/data/*.db
+/data/*.db-*
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "マルチエージェント討論ルーム",
-  description: "Claude API を使った賛成派・反対派・司会の3エージェント討論デモ",
+  title: "バーコード買取価格チェッカー",
+  description: "スマホでバーコードをスキャンして買取店の想定価格を比較するデモアプリ",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

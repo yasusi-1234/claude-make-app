@@ -1,209 +1,148 @@
 "use client";
 
-import { useRef, useState } from "react";
-import type { DebateEvent } from "@/lib/debate-events";
-import { PERSONAS, type PersonaId } from "@/lib/personas";
+import Link from "next/link";
+import { useCallback, useState } from "react";
+import { BarcodeScanner } from "@/components/BarcodeScanner";
+import type { ProductLookupResult } from "@/lib/lookup-types";
+import { SHOPS } from "@/lib/shops";
 
-type DisplayItem =
-  | { kind: "round"; round: number }
-  | { kind: "message"; persona: PersonaId; text: string; done: boolean };
-
-type Status = "idle" | "running" | "done" | "error";
+type Status = "idle" | "scanning" | "loading" | "found" | "not-found" | "error";
 
 export default function Home() {
-  const [topic, setTopic] = useState("");
-  const [rounds, setRounds] = useState(3);
-  const [mock, setMock] = useState(true);
-  const [items, setItems] = useState<DisplayItem[]>([]);
   const [status, setStatus] = useState<Status>("idle");
+  const [scannedCode, setScannedCode] = useState<string | null>(null);
+  const [result, setResult] = useState<ProductLookupResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
 
-  const startDebate = async () => {
-    const trimmedTopic = topic.trim();
-    if (!trimmedTopic || status === "running") return;
-
-    setItems([]);
-    setErrorMessage(null);
-    setStatus("running");
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-
+  const lookup = useCallback(async (barcode: string) => {
+    setScannedCode(barcode);
+    setStatus("loading");
     try {
-      const res = await fetch("/api/debate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: trimmedTopic, rounds, mock }),
-        signal: controller.signal,
-      });
-
-      if (!res.ok || !res.body) {
-        const payload = await res.json().catch(() => null);
-        throw new Error(payload?.error ?? `リクエストに失敗しました (${res.status})`);
+      const res = await fetch(`/api/lookup?barcode=${encodeURIComponent(barcode)}`);
+      if (res.status === 404) {
+        setResult(null);
+        setStatus("not-found");
+        return;
       }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          handleEvent(JSON.parse(line) as DebateEvent);
-        }
+      if (!res.ok) {
+        throw new Error(`検索に失敗しました (${res.status})`);
       }
-
-      setStatus((prev) => (prev === "error" ? prev : "done"));
+      const data = (await res.json()) as ProductLookupResult;
+      setResult(data);
+      setStatus("found");
     } catch (err) {
-      if ((err as Error).name === "AbortError") return;
       setErrorMessage(err instanceof Error ? err.message : "予期しないエラーが発生しました");
       setStatus("error");
     }
+  }, []);
+
+  const handleDetected = useCallback(
+    (code: string) => {
+      void lookup(code);
+    },
+    [lookup],
+  );
+
+  const startScan = () => {
+    setResult(null);
+    setScannedCode(null);
+    setErrorMessage(null);
+    setStatus("scanning");
   };
 
-  const handleEvent = (event: DebateEvent) => {
-    switch (event.type) {
-      case "round-start":
-        setItems((prev) => [...prev, { kind: "round", round: event.round }]);
-        break;
-      case "turn-start":
-        setItems((prev) => [...prev, { kind: "message", persona: event.persona, text: "", done: false }]);
-        break;
-      case "turn-delta":
-        setItems((prev) => {
-          const next = [...prev];
-          const last = next[next.length - 1];
-          if (last?.kind === "message" && last.persona === event.persona) {
-            next[next.length - 1] = { ...last, text: last.text + event.text };
-          }
-          return next;
-        });
-        break;
-      case "turn-end":
-        setItems((prev) => {
-          const next = [...prev];
-          const last = next[next.length - 1];
-          if (last?.kind === "message" && last.persona === event.persona) {
-            next[next.length - 1] = { ...last, done: true };
-          }
-          return next;
-        });
-        break;
-      case "error":
-        setErrorMessage(event.message);
-        setStatus("error");
-        break;
-      case "done":
-        setStatus("done");
-        break;
-    }
-  };
+  const bestPrice = result?.prices[0];
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 py-10">
       <header className="space-y-1">
-        <h1 className="text-2xl font-bold">マルチエージェント討論ルーム</h1>
+        <h1 className="text-2xl font-bold">バーコード買取価格チェッカー</h1>
         <p className="text-sm text-black/60 dark:text-white/60">
-          お題を入力すると、賛成派・反対派・司会の3人のAIが討論します。
+          商品のバーコードをスキャンすると、買取店ごとの想定価格を比較表示します。
         </p>
       </header>
 
-      <form
-        className="flex flex-col gap-3 sm:flex-row sm:items-end"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void startDebate();
-        }}
-      >
-        <label className="flex flex-1 flex-col gap-1 text-sm font-medium">
-          お題
-          <input
-            type="text"
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-            placeholder="例: リモートワークは出社より優れている"
-            disabled={status === "running"}
-            className="rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 disabled:opacity-50 dark:border-white/20 dark:focus:border-white/40"
-          />
-        </label>
+      <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+        現在はダミーのサンプルデータのみです。実際の買取店の相場ではありません。動作確認には{" "}
+        <Link href="/demo-barcodes" className="underline underline-offset-2">
+          デモ用バーコード一覧
+        </Link>{" "}
+        の画面をスマホで映してスキャンしてください。
+      </p>
 
-        <label className="flex flex-col gap-1 text-sm font-medium">
-          ラウンド数
-          <select
-            value={rounds}
-            onChange={(e) => setRounds(Number(e.target.value))}
-            disabled={status === "running"}
-            className="rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 disabled:opacity-50 dark:border-white/20 dark:focus:border-white/40"
-          >
-            {[1, 2, 3, 4, 5].map((n) => (
-              <option key={n} value={n} className="text-black">
-                {n}
-              </option>
-            ))}
-          </select>
-        </label>
-
+      {status !== "scanning" && (
         <button
-          type="submit"
-          disabled={status === "running" || !topic.trim()}
-          className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white transition disabled:opacity-40 dark:bg-white dark:text-black"
+          type="button"
+          onClick={startScan}
+          className="self-start rounded-md bg-black px-4 py-2 text-sm font-medium text-white transition dark:bg-white dark:text-black"
         >
-          {status === "running" ? "討論中..." : "討論開始"}
+          スキャン開始
         </button>
-      </form>
+      )}
 
-      <label className="flex items-center gap-2 text-sm text-black/70 dark:text-white/70">
-        <input
-          type="checkbox"
-          checked={mock}
-          onChange={(e) => setMock(e.target.checked)}
-          disabled={status === "running"}
-        />
-        モックモードで試す(API課金なし・定型文のダミー討論)
-      </label>
+      {status === "scanning" && (
+        <div className="flex flex-col gap-3">
+          <BarcodeScanner active={status === "scanning"} onDetected={handleDetected} />
+          <button
+            type="button"
+            onClick={() => setStatus("idle")}
+            className="self-start rounded-md border border-black/15 px-4 py-2 text-sm font-medium dark:border-white/20"
+          >
+            キャンセル
+          </button>
+        </div>
+      )}
 
-      {errorMessage && (
+      {status === "loading" && <p className="text-sm text-black/60 dark:text-white/60">検索中...</p>}
+
+      {status === "error" && errorMessage && (
         <p className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
           {errorMessage}
         </p>
       )}
 
-      <div className="flex flex-1 flex-col gap-3">
-        {items.map((item, idx) => {
-          if (item.kind === "round") {
-            return (
-              <div key={idx} className="my-1 text-center text-xs font-medium text-black/40 dark:text-white/40">
-                ── ラウンド {item.round} ──
-              </div>
-            );
-          }
-          const persona = PERSONAS[item.persona];
-          return (
-            <div key={idx} className={`rounded-lg border px-4 py-3 ${persona.accent}`}>
-              <div className="mb-1 flex items-center gap-2 text-xs font-semibold opacity-70">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-black/10 text-[10px] dark:bg-white/10">
-                  {persona.initial}
+      {status === "not-found" && scannedCode && (
+        <div className="rounded-md border border-black/10 px-4 py-3 text-sm dark:border-white/15">
+          バーコード <span className="font-mono">{scannedCode}</span>{" "}
+          のデータが見つかりませんでした。サンプルデータに含まれる商品ではない可能性があります。
+        </div>
+      )}
+
+      {status === "found" && result && (
+        <div className="flex flex-col gap-3 rounded-lg border border-black/10 p-4 dark:border-white/15">
+          <div>
+            <p className="text-xs text-black/50 dark:text-white/50">
+              {result.category ?? "カテゴリ不明"} / バーコード: {result.barcode}
+            </p>
+            <h2 className="text-lg font-semibold">{result.name}</h2>
+          </div>
+
+          <ul className="flex flex-col gap-2">
+            {result.prices.map((price) => (
+              <li
+                key={price.shop}
+                className={`flex items-center justify-between rounded-md border px-3 py-2 text-sm ${
+                  price.shop === bestPrice?.shop
+                    ? "border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/40"
+                    : "border-black/10 dark:border-white/15"
+                }`}
+              >
+                <span className="font-medium">
+                  {SHOPS[price.shop].name}
+                  {price.shop === bestPrice?.shop && (
+                    <span className="ml-2 rounded bg-emerald-600 px-1.5 py-0.5 text-xs text-white">
+                      最高額
+                    </span>
+                  )}
                 </span>
-                {persona.name}
-                {!item.done && <span className="animate-pulse">…</span>}
-              </div>
-              <p className="whitespace-pre-wrap text-sm leading-relaxed">{item.text}</p>
-            </div>
-          );
-        })}
-        {status === "idle" && items.length === 0 && (
-          <p className="text-sm text-black/40 dark:text-white/40">
-            お題を入力して「討論開始」を押すと、ここに討論が表示されます。
+                <span className="font-mono">¥{price.price.toLocaleString()}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-black/40 dark:text-white/40">
+            ※ダミーデータです。取得日時: {new Date(result.prices[0]?.scrapedAt ?? "").toLocaleString("ja-JP")}
           </p>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
