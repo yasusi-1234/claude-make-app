@@ -22,9 +22,21 @@ npm run dev
 - `/demo-barcodes` — サンプル商品のバーコード画像一覧。実物の商品が手元になくても、
   この画面をスマホのカメラで映せば動作確認できる
 
+### Tursoへの接続(本番用)
+
+DBは `@libsql/client` 経由で読み書きしていて、環境変数の有無で接続先を自動判定します。
+
+- `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` が**未設定** → ローカルの `data/store.db` を使用(開発用)
+- **設定済み** → そのままTursoのリモートDBに接続(コード変更不要)
+
+Vercelなどにデプロイする場合は、Tursoでデータベースを作成してこの2つの環境変数を
+デプロイ先に設定してください。ローカルの `data/store.db` は本番には含まれないので、
+Turso側で `npm run seed` (または `npm run scrape`) を一度実行してデータを投入する必要が
+あります。
+
 ## 仕組み
 
-- `lib/db.ts` — SQLite(`better-sqlite3`)の接続とスキーマ定義
+- `lib/db.ts` — `@libsql/client` の接続とスキーマ定義(ローカルファイル/Turso共通)
 - `lib/sample-products.ts` — ダミーの商品・価格データ(架空の値)
 - `scripts/seed.ts` — サンプルデータを `data/store.db` に投入するシードスクリプト
 - `app/api/lookup/route.ts` — バーコードでDBを検索するAPI

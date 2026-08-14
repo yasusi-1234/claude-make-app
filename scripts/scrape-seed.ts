@@ -24,16 +24,7 @@ async function main() {
     return;
   }
 
-  const db = getDb();
-  const upsertProduct = db.prepare(
-    `INSERT INTO products (barcode, name, category) VALUES (@barcode, @name, NULL)
-     ON CONFLICT(barcode) DO UPDATE SET name = excluded.name`,
-  );
-  const deletePrice = db.prepare(`DELETE FROM prices WHERE barcode = ? AND shop = ?`);
-  const insertPrice = db.prepare(
-    `INSERT INTO prices (barcode, shop, price, url, scraped_at)
-     VALUES (@barcode, @shop, @price, @url, @scrapedAt)`,
-  );
+  const db = await getDb();
 
   for (const barcode of TARGET_BARCODES) {
     console.log(`\n=== ${barcode} ===`);
@@ -48,13 +39,13 @@ async function main() {
 
         if (listing.found && typeof listing.price === "number") {
           productName = productName ?? listing.name ?? `商品 ${barcode}`;
-          deletePrice.run(barcode, target.shopId);
-          insertPrice.run({
-            barcode,
-            shop: target.shopId,
-            price: Math.round(listing.price),
-            url,
-            scrapedAt: new Date().toISOString(),
+          await db.execute({
+            sql: `DELETE FROM prices WHERE barcode = ? AND shop = ?`,
+            args: [barcode, target.shopId],
+          });
+          await db.execute({
+            sql: `INSERT INTO prices (barcode, shop, price, url, scraped_at) VALUES (?, ?, ?, ?, ?)`,
+            args: [barcode, target.shopId, Math.round(listing.price), url, new Date().toISOString()],
           });
           console.log(`  -> ${listing.name ?? "(名称不明)"}: ¥${listing.price}`);
         } else {
@@ -67,7 +58,11 @@ async function main() {
     }
 
     if (productName) {
-      upsertProduct.run({ barcode, name: productName });
+      await db.execute({
+        sql: `INSERT INTO products (barcode, name, category) VALUES (?, ?, NULL)
+              ON CONFLICT(barcode) DO UPDATE SET name = excluded.name`,
+        args: [barcode, productName],
+      });
     } else {
       console.log("  (どちらの店でも見つからなかったため products には登録していません)");
     }

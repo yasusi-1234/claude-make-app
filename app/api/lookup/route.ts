@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
     return Response.json({ error: "barcode is required" }, { status: 400 });
   }
 
-  const result = lookupProduct(barcode);
+  const result = await lookupProduct(barcode);
   if (!result) {
     return Response.json({ error: "not_found", barcode }, { status: 404 });
   }
