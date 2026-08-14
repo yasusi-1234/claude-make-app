@@ -11,9 +11,12 @@
 
 ```bash
 npm install
-npm run seed   # data/store.db にサンプル商品データを投入
 npm run dev
 ```
+
+`npm run dev` / `npm run build` はどちらも起動前に自動で `npm run seed` を実行して
+`data/store.db` にサンプルデータを投入するので、通常は手動で `npm run seed` を打つ必要は
+ありません(`TURSO_DATABASE_URL` 設定時はTurso側に投入されます)。
 
 [http://localhost:3000](http://localhost:3000) を開く。
 
@@ -29,10 +32,19 @@ DBは `@libsql/client` 経由で読み書きしていて、環境変数の有無
 - `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` が**未設定** → ローカルの `data/store.db` を使用(開発用)
 - **設定済み** → そのままTursoのリモートDBに接続(コード変更不要)
 
-Vercelなどにデプロイする場合は、Tursoでデータベースを作成してこの2つの環境変数を
-デプロイ先に設定してください。ローカルの `data/store.db` は本番には含まれないので、
-Turso側で `npm run seed` (または `npm run scrape`) を一度実行してデータを投入する必要が
-あります。
+### Vercelへのデプロイ
+
+Turso未設定のままVercelにデプロイしても動きます。ビルド時に `npm run seed` が
+自動実行され、生成された `data/store.db` は `next.config.ts` の
+`outputFileTracingIncludes` 設定によりAPI Routeのサーバーレス関数バンドルに
+含められるため、デプロイ後もサンプルデータの検索ができます(このアプリはDBへの
+書き込みをリクエスト時に行わないため、読み取り専用のバンドル同梱で問題ありません)。
+
+実データ運用に切り替える場合は、Tursoでデータベースを作成し、`TURSO_DATABASE_URL` /
+`TURSO_AUTH_TOKEN` をVercelの環境変数に設定してください。設定するとビルド時の
+`npm run seed` はTurso側に投入されるようになります(ローカルの `data/store.db` は
+使われなくなります)。実データを入れる場合は、Turso接続を設定した状態でローカルから
+`npm run scrape` を実行してください。
 
 ## 仕組み
 
