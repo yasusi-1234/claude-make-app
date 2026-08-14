@@ -21,7 +21,8 @@ npm run dev
 [http://localhost:3000](http://localhost:3000) を開く。
 
 - `/` — バーコードスキャン画面。カメラへのアクセスが必要なため、スマホの場合は
-  HTTPS(またはlocalhost)でアクセスすること
+  HTTPS(またはlocalhost)でアクセスすること。カメラが使えない場合や動作確認用に、
+  バーコード番号を直接入力して検索することもできる
 - `/demo-barcodes` — サンプル商品のバーコード画像一覧。実物の商品が手元になくても、
   この画面をスマホのカメラで映せば動作確認できる
 
@@ -50,11 +51,18 @@ Turso未設定のままVercelにデプロイしても動きます。ビルド時
 
 - `lib/db.ts` — `@libsql/client` の接続とスキーマ定義(ローカルファイル/Turso共通)
 - `lib/sample-products.ts` — ダミーの商品・価格データ(架空の値)
+- `lib/ean13.ts` — EAN-13のチェックデジット検証(手動入力のバリデーションに使用)
 - `scripts/seed.ts` — サンプルデータを `data/store.db` に投入するシードスクリプト
 - `app/api/lookup/route.ts` — バーコードでDBを検索するAPI
 - `components/BarcodeScanner.tsx` — `@zxing/browser` を使ったカメラでのバーコード読み取り
 - `app/page.tsx` — スキャン→検索→価格比較表示のメインUI
 - `app/demo-barcodes/page.tsx` — `jsbarcode` でサンプル商品のバーコード画像を描画
+
+## テスト・CI
+
+`npm test` で `vitest` によるユニットテストを実行(`lib/ean13.test.ts`,
+`lib/lookup.test.ts`。DBはインメモリの libSQL を使用)。
+`.github/workflows/ci.yml` で、push/PRのたびに lint・test・build を自動実行する。
 
 ### スクレイピングでの実データ取り込み(`npm run scrape`)
 

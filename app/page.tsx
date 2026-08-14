@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useState, type FormEvent } from "react";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
+import { isValidEan13 } from "@/lib/ean13";
 import type { ProductLookupResult } from "@/lib/lookup-types";
 import { SHOPS } from "@/lib/shops";
 
@@ -13,6 +14,7 @@ export default function Home() {
   const [scannedCode, setScannedCode] = useState<string | null>(null);
   const [result, setResult] = useState<ProductLookupResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [manualBarcode, setManualBarcode] = useState("");
 
   const lookup = useCallback(async (barcode: string) => {
     setScannedCode(barcode);
@@ -50,6 +52,18 @@ export default function Home() {
     setStatus("scanning");
   };
 
+  const submitManualBarcode = (e: FormEvent) => {
+    e.preventDefault();
+    const trimmed = manualBarcode.trim();
+    if (!trimmed) return;
+    if (!isValidEan13(trimmed)) {
+      setErrorMessage("13桁のEAN/JANコードとして正しくありません(チェックデジット不一致)。");
+      setStatus("error");
+      return;
+    }
+    void lookup(trimmed);
+  };
+
   const bestPrice = result?.prices[0];
 
   return (
@@ -70,13 +84,36 @@ export default function Home() {
       </p>
 
       {status !== "scanning" && (
-        <button
-          type="button"
-          onClick={startScan}
-          className="self-start rounded-md bg-black px-4 py-2 text-sm font-medium text-white transition dark:bg-white dark:text-black"
-        >
-          スキャン開始
-        </button>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <button
+            type="button"
+            onClick={startScan}
+            className="self-start rounded-md bg-black px-4 py-2 text-sm font-medium text-white transition dark:bg-white dark:text-black"
+          >
+            スキャン開始
+          </button>
+
+          <form onSubmit={submitManualBarcode} className="flex flex-1 gap-2">
+            <label className="flex flex-1 flex-col gap-1 text-sm font-medium">
+              バーコードを直接入力
+              <input
+                type="text"
+                inputMode="numeric"
+                value={manualBarcode}
+                onChange={(e) => setManualBarcode(e.target.value)}
+                placeholder="例: 4900000000016"
+                className="rounded-md border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/40"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={!manualBarcode.trim()}
+              className="self-end rounded-md border border-black/15 px-4 py-2 text-sm font-medium disabled:opacity-40 dark:border-white/20"
+            >
+              検索
+            </button>
+          </form>
+        </div>
       )}
 
       {status === "scanning" && (
